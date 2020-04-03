@@ -5,7 +5,7 @@
 Term: Spring 2020
 
 + Team # group 8
-+ Projec title: Lorem ipsum dolor sit amet
++ Projec title: Collaborative Filtering Algorithm Implementation and Evaluation
 + Team members
 	+ Shuxin Chen (sc4599)
 	+ Jia Li (jl5520)
