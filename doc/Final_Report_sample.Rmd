@@ -1,0 +1,333 @@
+---
+title: "Collaborative Filtering Algorithms Evaluation"
+author: "Shuxin Chen, Jia Li, Wenfeng Lyu, Daniel Schmidle, Yuyao Wang"
+date: "04/10/2020"
+output:
+  pdf_document:
+    toc: true
+  html_document:
+    df_print: paged
+    toc: true
+---
+
+# **1. Introduction**
+
+Recommendation system plays a vital role in e-commerce and online streaming services such as Amazon, Netflix, and Youtube. The primary goal of recommendation systems is to help users find what they want based on their preferences. 
+
+In this project, the datasets that we are going to use describe 5-star ratings from a movie recommendation service. We implemented two methods for collaborative filtering from scratch, namely Gradient Descent with Probabilistic Assumptions (A2) and Alternating Least Squares (A3). Then we have used SVD with Kernel Ridge Regression (P3) for post-processing to improve prediction accuracy. Later on, we compared and summarized the performance of these two methods given the same post-processing method. 
+
+# **2. Data Processing and Train-test Split**
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r, include=FALSE}
+options(tinytex.verbose = TRUE)
+```
+
+```{r, message=FALSE, echo=FALSE}
+if(!require("remotes")){
+  install.packages("remotes")
+}
+if(!require("krr")){
+  remotes::install_github("TimothyKBook/krr")
+}
+if(!require("dplyr")){
+  install.packages("dplyr")
+}
+if(!require("caret")){
+  install.packages("caret")
+}
+if(!require("pracma")){
+  install.packages("pracma")
+}
+if(!require("ggplot2")){
+  install.packages("ggplot2")
+}
+if(!require("tidyverse")){
+  install.packages("tidyverse")
+}
+library(krr)
+library(dplyr)
+library(caret)
+library(tidyr)
+library(ggplot2)
+library(tidyverse)
+library(pracma)
+
+data <- read.csv("../data/ml-latest-small/ratings.csv")
+```
+
+```{r}
+set.seed(0)
+# shuffle the row of the entire dataset
+data <- data[sample(nrow(data)),]
+
+# get a small dataset that contains all users and all movies
+unique.user<-duplicated(data[,1])
+unique.movie<-duplicated(data[,2])
+index<-unique.user & unique.movie
+all.user.movie <- data[!index,]
+
+# split training and test on the rest
+rest <- data[index,]
+test_idx <- sample(rownames(rest), round(nrow(data)/5, 0))
+train_idx <- setdiff(rownames(rest), test_idx)
+
+# combine the training with the previous dataset,
+# which has all users and all movies
+data_train <- rbind(all.user.movie, data[train_idx,]) 
+data_test <- data[test_idx,]
+
+# sort the training and testing data by userId then by movieId, 
+# so when we update p and q, it is less likely to make mistakes 
+data_train <- arrange(data_train, userId, movieId)
+data_test <- arrange(data_test, userId, movieId)
+```
+
+# **2. Algorithm Implementation**
+
+## **2.1 Gradient Descent with Probabilistic Assumptions (A2)**
+
+The idea behind this method refers to Probabilistic Matrix Facterization (PMF). Suppose there are $M$ movies and $N$ users, and integer rating values from 1 to $K$. Let $R_{ij}$ represent the rating of user $i$ for movie $j,U ∈ R^{D*N}$ and $V ∈ R^{D*M}$ be a latent user and movie feature matrices. We try to minimise the following objective function:
+
+![](../figs/A2_PMF_pics/A2_obj_func.png)
+
+**Method implementation**
+
+```{r}
+# Your code goes here ----------------------
+```
+
+**Evaluation**
+
+```{r}
+# Your code goes here ----------------------
+```
+
+**Visualization**
+
+```{r}
+# Your code goes here ----------------------
+```
+
+
+## **2.2 Alternating Lease Squares (A3)**
+
+In our project, we implement alternating least squares (ALS) menthod to solve the low-rank matrix factorization problem. In general, We are trying to minimise the following objective function with respect to U, M:
+
+![](../figs/A3_ALS_pics/ALS_obj_func.png)
+
+**Calculate RMSE**
+
+```{r}
+U <- length(unique(data$userId))
+I <- length(unique(data$movieId))
+RMSE <- function(rating, est_rating){
+  sqr_err <- function(obs){
+    sqr_error <- (obs[3] - est_rating[as.character(obs[1]), 
+                                      as.character(obs[2])])^2
+    return(sqr_error)
+  }
+  return(sqrt(mean(apply(rating, 1, sqr_err))))  
+}
+```
+
+**The alternating least squares (ALS) method is defined as follows:**
+
++ **Step 1:** Initial movie matrix M by assigning the average rating for that movie as the first row, and small random numbers for the remaining entries
++ **Step 2:** Fix M, solve U by minimizing the objective for the remaining entries
++ **Step 3:** Fix U, solve M by minimizing the objective function similarly
++ **Step 4:** Repeat Steps 2 and 3 until a stopping criterion is satisfied
+
+**The full code:**
+
+```{r}
+ALS <- function(f = 10, lambda = 0.3, max.iter=20, data, train=data_train, test=data_test){
+  
+  # Initialize Movie Matrix and User Matrix
+  Movie <- matrix(runif(f*I, -1, 1), ncol = I)
+  colnames(Movie) <- levels(as.factor(data$movieId))
+  
+  movie.average <- data %>% group_by(movieId) %>% 
+    summarize(ave=mean(rating))
+  Movie[1,] <- movie.average$ave
+  
+  
+  
+  User <- matrix(runif(f*U, -1, 1), ncol = U) 
+  colnames(User) <- levels(as.factor(data$userId))
+  
+  v1 <- aggregate(data,list(data$userId),length)
+  each_m <- as.numeric(unname(table(data$movieId)))
+  Movie_id<- names(table(data$movieId))
+  v2 <- cbind(Movie_id,each_m)
+  
+  movie.id <- sort(unique(data$movieId))
+  train_RMSE <- c()
+  test_RMSE <- c()
+  train <- arrange(train, userId, movieId)
+  for (l in 1:max.iter){
+    
+    # Step2: Fix M, Solve U
+    for (u in 1:U) {
+      v1_1<- as.numeric(v1[u,2])
+      x<-train[train$userId==u,]$rating
+      v1_2 <- matrix(x,nrow=length(x),ncol=1)
+      
+      User[,u] <- solve(Movie[,as.character(train[train$userId==u,]$movieId)] %*%
+                           t(Movie[,as.character(train[train$userId==u,]$movieId)]) + 
+                           lambda * v1_1 * diag(f)) %*%
+        Movie[,as.character(train[train$userId==u,]$movieId)] %*% v1_2}
+    
+    
+    # Step3: Fix U, Solve M  
+    for (i in 1:I) {
+      v2_1 <- as.numeric(v2[i,2])
+      y<-train[train$movieId==movie.id[i],]$rating
+      v2_2 <- matrix(y,nrow=length(y),ncol=1)
+      Movie[,i] <- solve (User[,train[train$movieId==movie.id[i],]$userId] %*% 
+                            t(User[,train[train$movieId==movie.id[i],]$userId]) + 
+                            lambda * v2_1  * diag(f)) %*%
+        User[,train[train$movieId==movie.id[i],]$userId] %*% v2_2}
+    
+    
+    # Summerize
+    cat("iter:", l, "\t")
+    est_rating <- t(User) %*% Movie 
+    colnames(est_rating) <- levels(as.factor(data$movieId))
+    
+    train_RMSE_cur <- RMSE(train, est_rating)
+    cat("training RMSE:", train_RMSE_cur, "\t")
+    train_RMSE <- c(train_RMSE, train_RMSE_cur)
+    
+    test_RMSE_cur <- RMSE(test, est_rating)
+    cat("test RMSE:",test_RMSE_cur, "\n")
+    test_RMSE <- c(test_RMSE, test_RMSE_cur)
+  } 
+  ratings<-t(as.matrix(User))%*%as.matrix(Movie)
+  return(list(p = User, q = Movie, r= ratings,
+              train_RMSE = train_RMSE, test_RMSE = test_RMSE))
+}
+```
+
+Then we want to get the r and q matrix for different latent factors and lambda. Here is an example code of geting the r and q matrix for factor of 10, lambda of 5 and RMSE:
+
+```{r}
+# the r and q matrix for factor of 10, lambda of 5 and RMSE
+als1= ALS(f = 10, lambda = 5, max.iter=5, data, train=data_train, test=data_test)
+movie_10= als1$q
+rating_10=t(as.matrix(als1$p))%*%as.matrix(als1$q)
+# write.csv(movie_10, file = "../output/A3_movie_factor10.csv")
+# write.csv(rating_10, file = "../output/A3_rating_factor10.csv")
+```
+
+Using similar method, we tried with other combinations and saved results in our output folder.
+
+```{r}
+# # the r matrix and q matrix for factor of 50, lambda of 5 and RMSE
+# als2= ALS(f = 50, lambda = 5, max.iter=5, data, train=data_train, test=data_test)
+# #the r matrix and q matrix for factor of 100, lambda of 5 and RMSE
+# als3= ALS(f = 100, lambda = 5, max.iter=5, data, train=data_train, test=data_test)
+# # the r matrix and q matrix for factor of 100, lambda of 1 and RMSE
+# als4= ALS(f = 100, lambda = 1, max.iter=5, data, train=data_train, test=data_test)
+# # the r matrix and q matrix for factor of 100, lambda of 0.1 and RMSE
+# als5= ALS(f = 100, lambda = 0.1, max.iter=5, data, train=data_train, test=data_test)
+# # the r matrix and q matrix for factor of 100, lambda of 0.5 and RMSE
+# als6= ALS(f = 100, lambda = 0.5, max.iter=5, data, train=data_train, test=data_test)
+```
+
+**Model Evaluation**
+
+```{r}
+als=data.frame(Factors=c(100,100,100),Lambda =rep(c(0.1,1,5),2),
+               RMSE=c(0.7737497,1.477465,3.646715, 1.008364,1.582375,3.680143),
+               Variable=c(rep("training",3),rep("test",3)))
+als
+```
+
+**Model Evaluation Visualisation**
+
+```{r}
+p1 <- ggplot(als, aes(x = Lambda, y = RMSE, colour=Variable)) + 
+  geom_line() +
+  ggtitle("Alternating Least Squares") +
+  theme(legend.position = "none") +
+  ylim(0.07, 3.7) +
+  ylab("RMSE") +
+  scale_x_continuous("Number of factors", breaks=c(0.1, 1,5))+
+  scale_colour_discrete(name = "Variables", labels = c("Train RMSE", "Test RMSE"))+
+  theme_light()
+
+p1
+```
+
+After having tried multiple different parameter combinations, we chose factors as 100, lambda as 0.5 for our ALS final model.
+
+**Experimental Results for ALS:**
+
+```{r}
+ALS_result <- ALS(f = 100, lambda =0.5,
+              max.iter = 5, data = data,
+              train = data_train, test = data_test)
+
+save(ALS_result, file = "../output/ALS_result.Rdata")
+```
+
+As illustrated above, we can tell that the MSE for Test data and Training data decreases in overall. The RMSE of training data is much more steep. The overall decrease of the RMSE does show good result for ALS. 
+
+# **3. Post-processing SVD with Kernel Ridge Regression**
+
+In the regularized SVD predictions for user $i$ and movie $j$ are made in the following way: 
+![](../figs/P3_KRR_pics/svd1.png)
+
+where $u_i$ and $v_j$ are K-dimensional vectors of parameters. Parameters are estimated by minimizing the sum of squared residuals.
+![](../figs/P3_KRR_pics/svd2.png)
+
+The idea of improving SVD is to discard all weights $u_{ik}$ after training and try to predict $y_{i,j}$ for each user $i$ using $v_{jk}$ as predictors, i.e ridge regression. Let's redefine $y$ as as a vector and $X$ be a matrix of observations - each row of $X$ is normalized vector of features of one movie $j$ rated by user $i$ : $x_{j2}$ = $v_j$/$||v_j||$. Then we can predict $y$ using ridge regression:
+![](../figs/P3_KRR_pics/svd3.png)
+
+By changing Gram matrix to a chosen positive definite matrix $K(X,X)$, we can obtain the method of kernel ridge ridge regression. Predictions in this model are made in the following way:
+![](../figs/P3_KRR_pics/svd4.png)
+
+where the good results can be obtained with Gaussian kernel $K(x^T_i,x^T_j) = exp(2(x^T_i*x_j-1))$.
+
+## **3.1 Gradient Descent with Probabilistic Assumptions (A2) with Post-processing**
+
+**Model implementation**
+
+```{r}
+# Your code goes here ----------------------
+```
+
+**Evaluation**
+
+```{r}
+# Your code goes here ----------------------
+```
+
+
+## **3.2 Alternating Least Squares (A3) with Post-processing**
+
+**Model implementation**
+
+```{r}
+# Your code goes here ----------------------
+```
+
+**Evaluation**
+
+```{r}
+# Your code goes here ----------------------
+```
+
+
+# **4. Conclusion**
+
+From the above table, if we implement A2 and A3 methods without post-processing, the resulting RMSE .......
+
+However, with post-processing, we can see the resulting RMSE.....
+
+Therefore,....
+
