@@ -1,0 +1,127 @@
+---
+title: "A2_algo"
+author: "ADS project 4 group 8"
+date: "4/22/2020"
+output: html_document
+---
+
+
+```{r}
+#Load ratings 
+ratings <- read.csv("../data/ml-latest-small/ratings.csv")
+user_count <- length(unique(ratings$userId))
+movie_count <- length(unique(ratings$movieId))
+```
+
+Split test train data 80/20:
+```{r}
+#library(caTools)
+
+#set.seed(0)
+
+#split <- sample.split(ratings$userId, SplitRatio = 0.8)
+
+#data_train <- subset(ratings,split==T)
+#data_test <-  subset(ratings,split==F)
+
+#save(data_train,file="../output/data_train.RData")
+#save(data_train,file="../output/data_test.RData")
+```
+
+```{r}
+factor <- 10
+```
+
+```{r}
+#Create Matrices 
+load("../output/data_train.RData")
+
+sig  <- .01
+sig_p <- 1
+sig_q <- 1
+
+total_num <- user_count*movie_count
+
+R <- matrix(rep(0,total_num), nrow=user_count,ncol=movie_count)
+P <- matrix(rnorm(mean=0,sd=sig_p,user_count*factor),nrow=user_count,ncol=factor)
+Q <- matrix(rnorm(mean=0,sd=sig_q,movie_count*factor),nrow=movie_count,ncol=factor)
+
+cnames <-  as.character(unique(ratings$movieId))
+rnames <- as.character(unique(ratings$userId))
+colnames(R) <- cnames
+rownames(R) <- rnames
+
+for(user in 1:2){
+  user_ratings <- data_train[user,2:3]
+  rated <- user_ratings$movieId
+  R[user,rated] <- user_ratings$rating
+} 
+
+```
+
+
+```{r}
+#A2 functions for PMF algorithm
+MSE <- function(R,P,Q){
+  PQT <- P %*% t(Q)
+  err = R - PQT
+  I <- ifelse(R!=0,0.5,0)
+  sq_err <-  err^2
+  ans = I*sq_err
+  mse <- sum(ans)
+  return(mse)
+}
+
+L2 <- function(s1,s2,X){
+  sq_X <- X^2
+  sum <- sum(sq_X)
+  c <- s1 / (s2*2)
+  c_sum <- c*sum
+  return(c_sum)
+}
+
+d_pq <- function(R,P,Q,s,sp,sq){
+  PQT <- P %*% t(Q)
+  err = R - PQT 
+  I <- ifelse(R!=0,1,0)
+  res <- I*err
+  d_p <- -1.0 * res %*% Q + s/sp *  P
+  d_q <- -1.0 * t(res) %*% P + s/sq * Q
+  return(list(d_p,d_q))
+}
+
+```
+
+```{r}
+#Run A2 algorithm
+learn_rate1 <- 0.001
+learn_rate2 <- 0.0001
+
+error <-  MSE(R,P,Q) + L2(sig,sig_p,P) + L2(sig,sig_q,Q)
+
+while(error >= 230){
+  if(error > 300){
+    lr <- learn_rate1
+  }
+  else{
+    lr <- learn_rate2
+  }
+  D <- d_pq(R,P,Q,sig,sig_p,sig_q)
+  d_p <- D[[1]]
+  d_q <- D[[2]]
+  P <- P - lr * d_p
+  Q <- Q - lr * d_q
+  error <- MSE(R,P,Q)
+  
+}
+
+```
+
+```{r}
+#Save P Q matrices
+save(P,file="../output/A2_P_factor10.csv")
+save(Q,file="../output/A2_Q_factor10.csv")
+
+```
+
+
