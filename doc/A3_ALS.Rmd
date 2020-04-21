@@ -1,0 +1,314 @@
+---
+title: "a3 part"
+author: "Yuyao Wang yw3395"
+date: "4/19/2020"
+output:
+  pdf_document: default
+  html_document:
+    df_print: paged
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+
+```{r}
+library(dplyr)
+library(tidyr)
+library(ggplot2)
+library(gbm)
+```
+
+```{r}
+# In this project, we implemented two algorithms 
+# for collaborative filtering from scratch: 
+# Gradient Descent with Probabilistic Assumptions (A2 in the assignment) 
+# and Alternating Least Squares (A3). 
+
+
+# Afterwards, we used Kernel Ridge Regression (P3) 
+# for post-processing. Our results indicate that KRR 
+# is a significant improvement for the algorithms. 
+
+# Also, we found that the more latent factors we use, 
+# the lower the final RMSE. 
+
+# Overall, the ALS outperforms GD with Probabilistic Assumptions 
+# for all levels of latent factors on the the test data.
+
+# Note on the scope of this report:
+# This report outlines matrix factorization algorithms 
+# with 100 latent factors. 
+# We also conducted the same procedure for 10 as well as 50 factors 
+
+```
+
+
+
+```{r}
+
+# Step 1 Load Data and Train-test Split
+
+data <- read.csv("~/Desktop/Project4-RecommenderSystem-master/data/ml-latest-small/ratings.csv")
+set.seed(0)
+head(data)
+dim(data)
+```
+
+
+
+```{r}
+# Data loading and preparation
+
+# We prepare the data by first shuffling it.
+# Then we split the data to train and test by a ratio of 
+# 80:20 and save them as .CSV file.
+# We want to use exactly the same data for each algorithm
+# for the sake of a fair comparison.
+
+
+# shuffle the row of the entire dataset
+data <- data[sample(nrow(data)),]
+
+# get a small dataset that contains all users and all movies
+unique.user<-duplicated(data[,1])
+unique.movie<-duplicated(data[,2])
+
+index<-unique.user & unique.movie
+all.user.movie <- data[!index,]
+
+# split training and test on the rest
+rest <- data[index,]
+
+test_idx <- sample(rownames(rest), round(nrow(data)/5, 0))
+
+train_idx <- setdiff(rownames(rest), test_idx)
+
+# combine the training with the previous dataset,
+# which has all users and all movies
+
+data_train <- rbind(all.user.movie, data[train_idx,]) 
+data_test <- data[test_idx,]
+
+# sort the training and testing data by userId then by movieId, 
+# so when we update p and q, it is less likely to make mistakes 
+
+data_train <- arrange(data_train, userId, movieId)
+data_test <- arrange(data_test, userId, movieId)
+
+```
+
+
+```{r}
+head(data_train)
+head(data_test)
+```
+
+
+
+```{r}
+# Define a function to calculate RMSE
+
+# In order to apply the ALS algorithm, 
+# we write a function that do the minimization
+# of the loss function. 
+
+# We take the derivative of the loss function and
+# set it to zero.
+
+# Then we alternatively fix p or q to solve for the other.  
+
+# Since we are working with matrix, 
+# so the first step is to initilize a matrix for movies and users. 
+# Then we solve of p and q alternatively by fixing the other 
+# and set the derivative of loss function to zero.
+
+
+
+
+ALS <- function(factors = 10, lambda = 1, max.iter=20, data, 
+                train=data_train, test=data_test){
+  U <- length(unique(data$userId))
+  M <- length(unique(data$movieId))
+  
+  train_RMSE <- c()
+  test_RMSE <- c()
+  
+  
+  # define the Movie matrix and introduce the penalty term
+
+  Movie <- matrix(runif(factors*M, -1, 1), ncol = M)
+  colnames(Movie) <- levels(as.factor(data$movieId))
+  
+  movie.average <- data %>%
+    group_by(movieId) %>% 
+    summarize(ave=mean(rating))
+  
+  Movie_id<- names(table(data$movieId))
+  movie.id <- sort(unique(data$movieId))
+  
+  Movie[1,] <- movie.average$ave
+  
+  
+  # define the user matrix and introduce the penalty term
+  
+  User <- matrix(runif(factors*U, -1, 1), ncol = U) 
+  colnames(User) <- levels(as.factor(data$userId))
+  
+  v1 <- aggregate(data,list(data$userId),length)
+  each_m <- as.numeric(unname(table(data$movieId)))
+  v2 <- cbind(Movie_id,each_m)
+  
+
+  # mutate trainset again
+  
+  train <- arrange(train, userId, movieId)
+  
+  # make the iteration 
+  
+  for (i in 1:max.iter){
+    
+    # Fix M, Solve U
+    
+    for (u in 1:U) {
+      v1_1<- as.numeric(v1[u,2])
+      
+      x<-train[train$userId==u,]$rating
+      
+      v1_2 <- matrix(x,nrow=length(x),ncol=1)
+      
+      User[,u] <- solve(Movie[,as.character(train[train$userId==u,]$movieId)] %*%
+                          t(Movie[,as.character(train[train$userId==u,]$movieId)]) + 
+                          lambda * v1_1 * diag(factors)) %*%
+        Movie[,as.character(train[train$userId==u,]$movieId)] %*% v1_2
+      }
+    
+    
+    # Fix U, Solve M  
+    
+    for (m in 1:M) {
+      v2_1 <- as.numeric(v2[m,2])
+      
+      y<-train[train$movieId==movie.id[m],]$rating
+      
+      v2_2 <- matrix(y,nrow=length(y),ncol=1)
+      
+      Movie[,m] <- solve (User[,train[train$movieId==movie.id[m],]$userId] %*% 
+                            t(User[,train[train$movieId==movie.id[m],]$userId]) + 
+                            lambda * v2_1  * diag(factors)) %*%
+        User[,train[train$movieId==movie.id[m],]$userId] %*% v2_2
+      }
+    
+     # define RMSE function
+    
+     RMSE <- function(rating, rating_estimate){
+       sqr_err <- function(obs){
+         sqr_error <- (obs[3] - rating_estimate[as.character(obs[1]), 
+                                      as.character(obs[2])])^2
+         return(sqr_error)
+         }
+       return(sqrt(mean(apply(rating, 1, sqr_err))))
+       }
+
+     
+     # computing rating_estimate and make the colnames
+    
+    rating_estimate <- t(User) %*% Movie 
+    colnames(rating_estimate) <- levels(as.factor(data$movieId))
+    
+    
+    # print the result
+    
+    cat("iter:", i, "\t")
+  
+    train_RMSE_1 <- RMSE(rating=train, rating_estimate=rating_estimate )
+    cat("training RMSE:", train_RMSE_1, "\t")
+    train_RMSE <- c(train_RMSE, train_RMSE_1)
+    
+    test_RMSE_1<- RMSE(rating=test,rating_estimate=rating_estimate )
+    cat("test RMSE:",test_RMSE_1, "\n")
+    test_RMSE <- c(test_RMSE, test_RMSE_1)
+    
+  }
+  ratings<-t(as.matrix(User))%*%as.matrix(Movie)
+  return(list(p = User, q = Movie, r= ratings,
+              train_RMSE = train_RMSE,
+              test_RMSE = test_RMSE))
+  
+}
+```
+
+
+```{r}
+# the r matrix and q matrix for factor of 100, lambda of 0.5 and RMSE
+als1= ALS(factors= 100, lambda = 0.5, max.iter=5, data, train=data_train, test=data_test)
+movie_lambda0.5= als1$q
+rating_lambda0.5=t(as.matrix(als1$p))%*%as.matrix(als1$q)
+
+```
+
+```{r}
+# the r matrix and q matrix for factor of 100, lambda of 1 and RMSE
+als2= ALS(factors= 100, lambda = 1, max.iter=5, data, train=data_train, test=data_test)
+movie_lambda1= als2$q
+rating_lambda1=t(as.matrix(als2$p))%*%as.matrix(als2$q)
+
+```
+
+```{r}
+# the r matrix and q matrix for factor of 100, lambda of 10 and RMSE
+als3= ALS(factors= 100, lambda = 10, max.iter=5, data, train=data_train, test=data_test)
+movie_lambda10= als3$q
+rating_lambda10=t(as.matrix(als3$p))%*%as.matrix(als3$q)
+
+```
+
+```{r}
+# the r matrix and q matrix for factor of 10, lambda of 0.5 and RMSE
+als4= ALS(factors = 10, lambda = 0.5, max.iter=5, data, train=data_train, test=data_test)
+movie_factor10= als4$q
+rating_factor10=t(as.matrix(als4$p))%*%as.matrix(als4$q)
+
+```
+
+
+```{r}
+
+# the r matrix and q matrix for factor of 50, lambda of 0.5 and RMSE
+als5= ALS(factors = 50, lambda = 0.5, max.iter=5, data, train=data_train, test=data_test)
+movie_factor50= als5$q
+rating_factor50=t(as.matrix(als5$p))%*%as.matrix(als5$q)
+
+```
+
+```{r}
+# save these datasets
+
+write.csv(data_train, 
+     file = "~/Desktop/Project4-RecommenderSystem-master/output/data_train.csv")
+write.csv(data_test, 
+     file = "~/Desktop/Project4-RecommenderSystem-master/output/data_test.csv")
+
+write.csv(movie_lambda0.5, 
+          file =  "~/Desktop/Project4-RecommenderSystem-master/output/A3_movie_lambda0.5.csv")
+write.csv(rating_lambda0.5, 
+          file ="~/Desktop/Project4-RecommenderSystem-master/output/A3_rating_lambda0.5.csv")
+write.csv(movie_lambda1, 
+          file = "~/Desktop/Project4-RecommenderSystem-master/output/A3_movie_lambda1.csv")
+write.csv(rating_lambda1, 
+          file = "~/Desktop/Project4-RecommenderSystem-master/output/A3_rating_lambda1.csv")
+write.csv(movie_lambda10,
+          file =  "~/Desktop/Project4-RecommenderSystem-master/output/A3_movie_lambda10.csv")
+write.csv(rating_lambda10, 
+          file ="~/Desktop/Project4-RecommenderSystem-master/output/A3_rating_lambda10.csv")
+write.csv(movie_factor10, 
+          file = "~/Desktop/Project4-RecommenderSystem-master/output/A3_movie_factor10.csv")
+write.csv(rating_factor10, 
+          file = "~/Desktop/Project4-RecommenderSystem-master/output/A3_rating_factor10.csv")
+write.csv(movie_factor50, 
+          file =  "~/Desktop/Project4-RecommenderSystem-master/output/A3_movie_factor50.csv")
+write.csv(rating_factor50,
+          file ="~/Desktop/Project4-RecommenderSystem-master/output/A3_rating_factor50.csv")
+```
+
