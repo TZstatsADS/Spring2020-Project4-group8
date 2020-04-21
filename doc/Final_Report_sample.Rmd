@@ -55,7 +55,6 @@ library(tidyr)
 library(ggplot2)
 library(tidyverse)
 library(pracma)
-
 data <- read.csv("../data/ml-latest-small/ratings.csv")
 ```
 
@@ -63,23 +62,19 @@ data <- read.csv("../data/ml-latest-small/ratings.csv")
 set.seed(0)
 # shuffle the row of the entire dataset
 data <- data[sample(nrow(data)),]
-
 # get a small dataset that contains all users and all movies
 unique.user<-duplicated(data[,1])
 unique.movie<-duplicated(data[,2])
 index<-unique.user & unique.movie
 all.user.movie <- data[!index,]
-
 # split training and test on the rest
 rest <- data[index,]
 test_idx <- sample(rownames(rest), round(nrow(data)/5, 0))
 train_idx <- setdiff(rownames(rest), test_idx)
-
 # combine the training with the previous dataset,
 # which has all users and all movies
 data_train <- rbind(all.user.movie, data[train_idx,]) 
 data_test <- data[test_idx,]
-
 # sort the training and testing data by userId then by movieId, 
 # so when we update p and q, it is less likely to make mistakes 
 data_train <- arrange(data_train, userId, movieId)
@@ -119,20 +114,7 @@ In our project, we implement alternating least squares (ALS) menthod to solve th
 
 ![](../figs/A3_ALS_pics/ALS_obj_func.png)
 
-**Calculate RMSE**
 
-```{r}
-U <- length(unique(data$userId))
-I <- length(unique(data$movieId))
-RMSE <- function(rating, est_rating){
-  sqr_err <- function(obs){
-    sqr_error <- (obs[3] - est_rating[as.character(obs[1]), 
-                                      as.character(obs[2])])^2
-    return(sqr_error)
-  }
-  return(sqrt(mean(apply(rating, 1, sqr_err))))  
-}
-```
 
 **The alternating least squares (ALS) method is defined as follows:**
 
@@ -144,73 +126,119 @@ RMSE <- function(rating, est_rating){
 **The full code:**
 
 ```{r}
-ALS <- function(f = 10, lambda = 0.3, max.iter=20, data, train=data_train, test=data_test){
+
+ALS <- function(factors = 10, lambda = 1, max.iter=20, data, 
+                train=data_train, test=data_test){
+  U <- length(unique(data$userId))
+  M <- length(unique(data$movieId))
   
-  # Initialize Movie Matrix and User Matrix
-  Movie <- matrix(runif(f*I, -1, 1), ncol = I)
+  train_RMSE <- c()
+  test_RMSE <- c()
+  
+  
+  # define the Movie matrix and introduce the penalty term
+
+  Movie <- matrix(runif(factors*M, -1, 1), ncol = M)
   colnames(Movie) <- levels(as.factor(data$movieId))
   
-  movie.average <- data %>% group_by(movieId) %>% 
+  movie.average <- data %>%
+    group_by(movieId) %>% 
     summarize(ave=mean(rating))
+  
+  Movie_id<- names(table(data$movieId))
+  movie.id <- sort(unique(data$movieId))
+  
   Movie[1,] <- movie.average$ave
   
   
+  # define the user matrix and introduce the penalty term
   
-  User <- matrix(runif(f*U, -1, 1), ncol = U) 
+  User <- matrix(runif(factors*U, -1, 1), ncol = U) 
   colnames(User) <- levels(as.factor(data$userId))
   
   v1 <- aggregate(data,list(data$userId),length)
   each_m <- as.numeric(unname(table(data$movieId)))
-  Movie_id<- names(table(data$movieId))
   v2 <- cbind(Movie_id,each_m)
   
-  movie.id <- sort(unique(data$movieId))
-  train_RMSE <- c()
-  test_RMSE <- c()
+
+  # mutate trainset again
+  
   train <- arrange(train, userId, movieId)
-  for (l in 1:max.iter){
+  
+  # make the iteration 
+  
+  for (i in 1:max.iter){
     
-    # Step2: Fix M, Solve U
+    # Fix M, Solve U
+    
     for (u in 1:U) {
       v1_1<- as.numeric(v1[u,2])
+      
       x<-train[train$userId==u,]$rating
+      
       v1_2 <- matrix(x,nrow=length(x),ncol=1)
       
       User[,u] <- solve(Movie[,as.character(train[train$userId==u,]$movieId)] %*%
-                           t(Movie[,as.character(train[train$userId==u,]$movieId)]) + 
-                           lambda * v1_1 * diag(f)) %*%
-        Movie[,as.character(train[train$userId==u,]$movieId)] %*% v1_2}
+                          t(Movie[,as.character(train[train$userId==u,]$movieId)]) + 
+                          lambda * v1_1 * diag(factors)) %*%
+        Movie[,as.character(train[train$userId==u,]$movieId)] %*% v1_2
+      }
     
     
-    # Step3: Fix U, Solve M  
-    for (i in 1:I) {
-      v2_1 <- as.numeric(v2[i,2])
-      y<-train[train$movieId==movie.id[i],]$rating
+    # Fix U, Solve M  
+    
+    for (m in 1:M) {
+      v2_1 <- as.numeric(v2[m,2])
+      
+      y<-train[train$movieId==movie.id[m],]$rating
+      
       v2_2 <- matrix(y,nrow=length(y),ncol=1)
-      Movie[,i] <- solve (User[,train[train$movieId==movie.id[i],]$userId] %*% 
-                            t(User[,train[train$movieId==movie.id[i],]$userId]) + 
-                            lambda * v2_1  * diag(f)) %*%
-        User[,train[train$movieId==movie.id[i],]$userId] %*% v2_2}
+      
+      Movie[,m] <- solve (User[,train[train$movieId==movie.id[m],]$userId] %*% 
+                            t(User[,train[train$movieId==movie.id[m],]$userId]) + 
+                            lambda * v2_1  * diag(factors)) %*%
+        User[,train[train$movieId==movie.id[m],]$userId] %*% v2_2
+      }
+    
+     # define RMSE function
+    
+     RMSE <- function(rating, rating_estimate){
+       sqr_err <- function(obs){
+         sqr_error <- (obs[3] - rating_estimate[as.character(obs[1]), 
+                                      as.character(obs[2])])^2
+         return(sqr_error)
+         }
+       return(sqrt(mean(apply(rating, 1, sqr_err))))
+       }
+
+     
+     # computing rating_estimate and make the colnames
+    
+    rating_estimate <- t(User) %*% Movie 
+    colnames(rating_estimate) <- levels(as.factor(data$movieId))
     
     
-    # Summerize
-    cat("iter:", l, "\t")
-    est_rating <- t(User) %*% Movie 
-    colnames(est_rating) <- levels(as.factor(data$movieId))
+    # print the result
     
-    train_RMSE_cur <- RMSE(train, est_rating)
-    cat("training RMSE:", train_RMSE_cur, "\t")
-    train_RMSE <- c(train_RMSE, train_RMSE_cur)
+    cat("iter:", i, "\t")
+  
+    train_RMSE_1 <- RMSE(rating=train, rating_estimate=rating_estimate )
+    cat("training RMSE:", train_RMSE_1, "\t")
+    train_RMSE <- c(train_RMSE, train_RMSE_1)
     
-    test_RMSE_cur <- RMSE(test, est_rating)
-    cat("test RMSE:",test_RMSE_cur, "\n")
-    test_RMSE <- c(test_RMSE, test_RMSE_cur)
-  } 
+    test_RMSE_1<- RMSE(rating=test,rating_estimate=rating_estimate )
+    cat("test RMSE:",test_RMSE_1, "\n")
+    test_RMSE <- c(test_RMSE, test_RMSE_1)
+    
+  }
   ratings<-t(as.matrix(User))%*%as.matrix(Movie)
   return(list(p = User, q = Movie, r= ratings,
-              train_RMSE = train_RMSE, test_RMSE = test_RMSE))
+              train_RMSE = train_RMSE,
+              test_RMSE = test_RMSE))
+  
 }
 ```
+
 
 Then we want to get the r and q matrix for different latent factors and lambda. Here is an example code of geting the r and q matrix for factor of 10, lambda of 5 and RMSE:
 
@@ -259,7 +287,6 @@ p1 <- ggplot(als, aes(x = Lambda, y = RMSE, colour=Variable)) +
   scale_x_continuous("Number of factors", breaks=c(0.1, 1,5))+
   scale_colour_discrete(name = "Variables", labels = c("Train RMSE", "Test RMSE"))+
   theme_light()
-
 p1
 ```
 
@@ -268,10 +295,9 @@ After having tried multiple different parameter combinations, we chose factors a
 **Experimental Results for ALS:**
 
 ```{r}
-ALS_result <- ALS(f = 100, lambda =0.5,
+ALS_result <- ALS(factors = 100, lambda =0.5,
               max.iter = 5, data = data,
               train = data_train, test = data_test)
-
 save(ALS_result, file = "../output/ALS_result.Rdata")
 ```
 
@@ -318,7 +344,6 @@ First, load necessary datasets.
 ```{r}
 traindata<-read.csv("../output/train_set.csv")
 testdata<-read.csv("../output/test_set.csv")
-
 factor100<-FALSE
 factor50<-TRUE
 factor10<-FALSE
@@ -342,7 +367,6 @@ Then, to transform data into formats that can be applied in *krr()* function. Fi
 train.split<-split(traindata, traindata$userId)
 movie<-as.vector(unlist(c(q[1,])))
 q<-as.matrix(q[-1,])
-
 trainq.split<-list()
 for (k in 1:length(train.split)){
   new<-c()
@@ -351,14 +375,11 @@ for (k in 1:length(train.split)){
  }
   trainq.split[[k]]<-new
  }
-
 normal<-function(vec){
   return(vec/sqrt(sum(vec^2)))
 }
-
 q.trans<-apply(q,2,normal)
 q.trans[which(is.na(q.trans))]<-0
-
 data.split<-list()
 for(i in 1:length(trainq.split)){
   normq.split<-apply(trainq.split[[i]], 2, normal)
@@ -403,13 +424,11 @@ for (i in 1:length(lambdas)){
   error<-lapply(data.split, CV.KRR, 5, lambdas[i])
   rmse.para[i, 2]<-sum(unlist(error))
 }  
-
 lambda.best<-rmse.para$lambda[which.min(rmse.para$rmse)]
 ```
 
 ### **c)Train model and get prediction
 Using $\lambda=0.75$ to train krr model for each user and get rating prediction for all movies of each use. In other words, the size of prediction matrix should be 610(uses)*9725(moviess).
-
 ```{r}
 pred<-matrix(0, length(data.split), ncol(q))
 for (i in 1:length(data.split)){
@@ -417,7 +436,6 @@ for (i in 1:length(data.split)){
   pred[i, ]<-predict(model, t(q.trans))
 }
 ```
-
 **Evaluation**
 *r matrix* generated by ALS contains rating prediction without postprocessing. Combine the predictions of methods with and without postprocessing. Explore what weight of postprocessing gave the best performance. 
 
@@ -466,4 +484,3 @@ From the above table, if we implement A2 and A3 methods without post-processing,
 However, with post-processing, we can see the resulting RMSE.....
 
 Therefore,....
-
