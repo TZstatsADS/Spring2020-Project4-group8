@@ -356,14 +356,14 @@ factor10<-FALSE
 
 if(factor100 == TRUE){
   q<-read.csv("../output/A3_movie_lambda0.5.csv", header = FALSE)
-  r<-read.csv("../output/A3_rating_lambda0.5.csv", header = FALSE)
+  load("A3_rating_lambda0.5.RData")
 }else{
   if(factor50 == TRUE){
     q<-read.csv("../output/A3_movie_factor50.csv", header = FALSE)
-    r<-read.csv("../output/A3_rating_factor50.csv", header = FALSE)
+    load("A3_rating_factor50.RData")
   }else{
     q<-read.csv("../output/A3_movie_factor10.csv", header = FALSE)
-    r<-read.csv("../output/A3_rating_factor10.csv", header = FALSE)
+    load("A3_rating_factor10.RData")
   }
 }
 ```
