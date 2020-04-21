@@ -1,0 +1,203 @@
+---
+title: "ADS Project4"
+author: "Shuxin Chen"
+date: "4/19/2020"
+output: word_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+### Load necessary packages
+```{r}
+if(!require("remotes")){
+  install.packages("remotes")
+}
+if(!require("krr")){
+  remotes::install_github("TimothyKBook/krr")
+}
+if(!require("dplyr")){
+  install.packages("dplyr")
+}
+if(!require("caret")){
+  install.packages("caret")
+}
+if(!require("tidyr")){
+  install.packages("tidyr")
+}
+if(!require("ggplot2")){
+  install.packages("ggplot2")
+}
+library(krr)
+library(dplyr)
+library(caret)
+library(tidyr)
+library(ggplot2)
+```
+
+### Required Functions 
+#### Cross-Validation
+```{r CV FUNCTION}
+CV.KRR<-function(data, K, lambda){
+  n<-nrow(data)
+  Xdata<-data[,-1]
+  Ydata<-data[,1]
+  set.seed(0)
+  folds <- createFolds(1:n, K)  
+  cv.error<-c()
+  
+  for (i in folds){
+    Xtrain<-Xdata[-i, ]
+    Ytrain<-Ydata[-i]
+    Xvali<-Xdata[i, ]
+    Yvali<-Ydata[i]
+    
+    model<-krr(x=Xtrain, y=Ytrain, lambda = lambda)
+    pred<-predict(model, Xvali)
+    
+    error<-sqrt(mean((Yvali-pred)^2))
+    cv.error<-c(cv.error, error)
+  }
+  return(mean(cv.error))
+}
+```
+
+```{r mse}
+mse<-function(ori, calc){
+  movie<-ori$movieId
+  user<-ori$userId
+  pred<-diag(as.matrix(calc[match(as.character(user), rownames(calc)), match(as.character(movie), colnames(calc))]))
+  return(mean((ori$rating-pred)^2))
+}
+```
+
+
+### Load Data
+```{r}
+dataset<-read.csv("ratings.csv")
+n<-nrow(dataset)
+set.seed(0)
+train_idx<-sample(n, round(n*0.8))
+traindata<-dataset[train_idx,]
+testdata<-dataset[-train_idx,]
+
+
+factor100<-T
+factor50<-F
+factor10<-F
+if(factor100 == TRUE){
+  q<-read.csv("../output/A3_movie_lambda0.5.csv", header = FALSE)
+  r<-read.csv("../output/A3_rating_lambda0.5.csv", header = FALSE)
+}else{
+  if(factor50 == TRUE){
+    q<-read.csv("../output/A3_movie_factor50.csv", header = FALSE)
+    r<-read.csv("../output/A3_rating_factor50.csv", header = FALSE)
+  }else{
+    q<-read.csv("../output/A3_movie_factor10.csv", header = FALSE)
+    r<-read.csv("../output/A3_rating_factor10.csv", header = FALSE)
+  }
+}
+
+```
+
+###Postprocessing
+```{r prepare data}
+train.split<-split(traindata, traindata$userId)
+movie<-as.vector(unlist(c(q[1,])))
+q<-as.matrix(q[-1,])
+
+trainq.split<-list()
+for (k in 1:length(train.split)){
+  new<-c()
+  for (i in 1:dim(train.split[[k]])[1]){
+ new<-cbind(new,q[,which(movie==train.split[[k]]$movieId[i])])
+ }
+  trainq.split[[k]]<-new
+ }
+
+normal<-function(vec){
+  return(vec/sqrt(sum(vec^2)))
+}
+
+q.trans<-apply(q,2,normal)
+q.trans[which(is.na(q.trans))]<-0
+
+data.split<-list()
+for(i in 1:length(trainq.split)){
+  normq.split<-apply(trainq.split[[i]], 2, normal)
+  data.split[[i]]<-cbind(train.split[[i]]$rating, t(normq.split))
+}
+```
+
+### Tuning Parameter 
+Use Cross Validation to choose the optimal $\lambda$. The value of $\lambda$ suggested in the paper is 0.5 while our test indicated that $\lambda = 0.65$ is the best choice of parameter given 50 factors.
+```{r}
+lambdas<-c(0.75, 0.8, 0.85)
+rmse.para<-data.frame(lambda=lambdas, rmse=rep(0, length(lambdas)))
+for (i in 1:length(lambdas)){
+  error<-lapply(data.split, CV.KRR, 5, lambdas[i])
+  rmse.para[i, 2]<-mean(unlist(error))
+}  
+
+lambda.best<-rmse.para$lambda[which.min(rmse.para$rmse)]
+
+```
+
+```{r}
+pred<-matrix(0, length(data.split), ncol(q))
+for (i in 1:length(data.split)){
+  model<-krr(data.split[[i]][,-1], data.split[[i]][,1], 0.75)
+  pred[i, ]<-predict(model, t(q.trans))
+}
+```
+
+```{r}
+r<-r[-1,]
+colnames(r)<-as.character(movie)
+rownames(r)<-c(1:610)
+colnames(pred)<-as.character(movie)
+rownames(pred)<-c(1:610)
+```
+
+Check whether changing weight will improve the performance. 
+
+```{r}
+weight<-seq(0, 1, 0.1)
+rmse.train<-data.frame(weight=weight, RMSE=rep(0, length(weight)))
+for (i in 1:length(weight)){
+  rating.weight<-r*(1-weight[i])+pred*weight[i]
+  rating.weight<-as.matrix(rating.weight)
+  ###reached the limit of computer memory
+  
+  meanA<-mse(traindata[1:30000, ], rating.weight)
+  meanB<-mse(traindata[30001:60000, ], rating.weight)
+  meanC<-mse(traindata[60001:nrow(traindata), ], rating.weight)
+  rmse.train[i, 2]<-sqrt(((meanA+meanB)*30000+meanC*(nrow(traindata)-60000))/nrow(traindata))
+}
+rmse.train
+```
+
+```{r}
+weight.best<-rmse.train$weight[which.min(rmse.train$RMSE)]
+rw.best<-r*(1-weight.best)+pred*weight.best
+meanT<-mse(testdata, rw.best)
+rmse.test<-sqrt(meanT)
+rmse.test
+```
+
+
+###DATA OUTPUT
+```{r}
+P3.A3<-data.frame(factor=c(10, 50, 100), `Train RMSE`=c(0.8955452, 0.8943138, 0.8933866), `Test RMSE`=c(0.9134247, 0.9120027, 0.9110096))
+P3.A3<-P3.A3%>%
+  pivot_longer(-factor,names_to = "Type", values_to = "RMSE")
+write.csv(P3.A3, "../output/A3P3.csv")
+
+p.A3P3<-ggplot(P3.A3, aes(x=factor, y=RMSE, col=Type))+
+  geom_line()+
+  labs(title = "ALS with Postprocessing", x="Number of Factors", y="RMSE")+
+  theme_light()+
+  theme(plot.title = element_text(hjust = 0.5))
+p.A3P3
+```
