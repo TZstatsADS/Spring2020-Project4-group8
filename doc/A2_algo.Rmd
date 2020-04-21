@@ -29,7 +29,7 @@ Split test train data 80/20:
 ```
 
 ```{r}
-factor <- 10
+factor <- 100
 ```
 
 ```{r}
@@ -119,8 +119,8 @@ while(error >= 230){
 
 ```{r}
 #Save P Q matrices
-save(P,file="../output/A2_P_factor10.csv")
-save(Q,file="../output/A2_Q_factor10.csv")
+write.csv(P,file="../output/A2_P_factor100.csv",row.names = F)
+write.csv(Q,file="../output/A2_Q_factor100.csv",row.names = F)
 
 ```
 
