@@ -427,8 +427,9 @@ for (i in 1:length(lambdas)){
 lambda.best<-rmse.para$lambda[which.min(rmse.para$rmse)]
 ```
 
-### **c)Train model and get prediction
+### **c)Train model and get prediction**
 Using $\lambda=0.75$ to train krr model for each user and get rating prediction for all movies of each use. In other words, the size of prediction matrix should be 610(uses)*9725(moviess).
+
 ```{r}
 pred<-matrix(0, length(data.split), ncol(q))
 for (i in 1:length(data.split)){
