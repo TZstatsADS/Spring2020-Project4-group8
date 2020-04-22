@@ -15,11 +15,11 @@ Term: Spring 2020
 + Project summary: In this project, the datasets that we are going to use describe 5-star ratings from a movie recommendation service. We implemented two methods for collaborative filtering from scratch, namely Gradient Descent with Probabilistic Assumptions (A2) and Alternating Least Squares (A3). Then we have used SVD with Kernel Ridge Regression (P3) for post-processing to improve prediction accuracy. In the end, we compared and summarized the performance of these two methods given the same post-processing method (SVD with KRR).
 	
 **Contribution statement**:  
-+ Shuxin Chen: 
++ Shuxin Chen: Write the A3 post-processing part, helped Yuyao Wang completed the A3 (Alternating Least Squares) code, and contributed to complete the final report.
 + Jia Li:
 + Wenfeng Lyu: write the main.rmd and final report, summarise and organise other's work, prepare the presentation slides and record, organise the github
 + Daniel Schmidle:
-+ Yuyao Wang:
++ Yuyao Wang: Write the A3 (Alternating Least Squares) part, helped Shuxin Chen completed the A3 post-processing code, and contributed to complete the final report.
 
 All team members approve our work presented in this GitHub repository including this contributions statement.
 
