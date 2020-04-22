@@ -465,15 +465,19 @@ As illustrated above, we can tell that the MSE for Test data and Training data d
 # **3. Post-processing SVD with Kernel Ridge Regression**
 
 In the regularized SVD predictions for user $i$ and movie $j$ are made in the following way: 
+
 ![](../figs/P3_KRR_pics/svd1.png)
 
 where $u_i$ and $v_j$ are K-dimensional vectors of parameters. Parameters are estimated by minimizing the sum of squared residuals.
+
 ![](../figs/P3_KRR_pics/svd2.png)
 
 The idea of improving SVD is to discard all weights $u_{ik}$ after training and try to predict $y_{i,j}$ for each user $i$ using $v_{jk}$ as predictors, i.e ridge regression. Let's redefine $y$ as as a vector and $X$ be a matrix of observations - each row of $X$ is normalized vector of features of one movie $j$ rated by user $i$ : $x_{j2}$ = $v_j$/$||v_j||$. Then we can predict $y$ using ridge regression:
+
 ![](../figs/P3_KRR_pics/svd3.png)
 
 By changing Gram matrix to a chosen positive definite matrix $K(X,X)$, we can obtain the method of kernel ridge ridge regression. Predictions in this model are made in the following way:
+
 ![](../figs/P3_KRR_pics/svd4.png)
 
 where the good results can be obtained with Gaussian kernel $K(x^T_i,x^T_j) = exp(2(x^T_i*x_j-1))$.
