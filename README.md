@@ -14,12 +14,14 @@ Term: Spring 2020
 	+ Yuyao Wang (yw3395)
 + Project summary: In this project, the datasets that we are going to use describe 5-star ratings from a movie recommendation service. We implemented two methods for collaborative filtering from scratch, namely Gradient Descent with Probabilistic Assumptions (A2) and Alternating Least Squares (A3). Then we have used SVD with Kernel Ridge Regression (P3) for post-processing to improve prediction accuracy. In the end, we compared and summarized the performance of these two methods given the same post-processing method (SVD with KRR).
 	
-**Contribution statement**: [default] All team members contributed equally in all stages of this project. All team members approve our work presented in this GitHub repository including this contributions statement. 
+**Contribution statement**:  
 + Shuxin Chen: 
 + Jia Li:
-+ Wenfeng Lyu:
++ Wenfeng Lyu: 
 + Daniel Schmidle:
 + Yuyao Wang:
+
+All team members approve our work presented in this GitHub repository including this contributions statement.
 
 Following [suggestions](http://nicercode.github.io/blog/2013-04-05-projects/) by [RICH FITZJOHN](http://nicercode.github.io/about/#Team) (@richfitz). This folder is orgarnized as follows.
 
