@@ -17,7 +17,7 @@ Term: Spring 2020
 **Contribution statement**:  
 + Shuxin Chen: 
 + Jia Li:
-+ Wenfeng Lyu: 
++ Wenfeng Lyu: write the main.rmd and final report, summarise and organisa other's work, prepare the presentation slides and record, organise the github
 + Daniel Schmidle:
 + Yuyao Wang:
 
