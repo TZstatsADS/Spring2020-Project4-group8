@@ -1,0 +1,392 @@
+---
+title: "A2 Algorithm and Post Processing"
+author: "ADS project 4 group 8"
+date: "4/22/2020"
+output: pdf_document
+---
+
+
+```{r}
+#Load ratings 
+ratings <- read.csv("~/Desktop/Project4-RecommenderSystem-master/data/ml-latest-small/ratings.csv")
+user_count <- length(unique(ratings$userId))
+movie_count <- length(unique(ratings$movieId))
+```
+
+```{r}
+#Split test train data 80/20:
+#library(caTools)
+
+#set.seed(0)
+
+#split <- sample.split(ratings$userId, SplitRatio = 0.8)
+
+#data_train <- subset(ratings,split==T)
+#data_test <-  subset(ratings,split==F)
+
+#save(data_train,file="../output/data_train.RData")
+#save(data_train,file="../output/data_test.RData")
+```
+
+```{r}
+#Factor to use 
+a2_factor <- 100
+```
+
+```{r}
+#Create Matrices 
+load("~/Desktop/data_train.csv")
+
+sig  <- .01
+sig_p <- 1
+sig_q <- 1
+
+total_num <- user_count*movie_count
+
+R <- matrix(rep(0,total_num), nrow=user_count,ncol=movie_count)
+P <- matrix(rnorm(mean=0,sd=sig_p,user_count*a2_factor),nrow=user_count,ncol=a2_factor)
+Q <- matrix(rnorm(mean=0,sd=sig_q,movie_count*a2_factor),nrow=movie_count,ncol=a2_factor)
+
+cnames <-  as.character(unique(ratings$movieId))
+rnames <- as.character(unique(ratings$userId))
+colnames(R) <- cnames
+rownames(R) <- rnames
+
+for(user in 1:2){
+  user_ratings <- data_train[user,2:3]
+  rated <- user_ratings$movieId
+  R[user,rated] <- user_ratings$rating
+} 
+
+```
+
+
+```{r}
+#A2 functions for PMF algorithm
+MSE <- function(R,P,Q){
+  PQT <- P %*% t(Q)
+  err = R - PQT
+  I <- ifelse(R!=0,0.5,0)
+  sq_err <-  err^2
+  ans = I*sq_err
+  mse <- sum(ans)
+  return(mse)
+}
+
+L2 <- function(s1,s2,X){
+  sq_X <- X^2
+  sum <- sum(sq_X)
+  c <- s1 / (s2*2)
+  c_sum <- c*sum
+  return(c_sum)
+}
+
+d_pq <- function(R,P,Q,s,sp,sq){
+  PQT <- P %*% t(Q)
+  err = R - PQT 
+  I <- ifelse(R!=0,1,0)
+  res <- I*err
+  d_p <- -1.0 * res %*% Q + s/sp *  P
+  d_q <- -1.0 * t(res) %*% P + s/sq * Q
+  return(list(d_p,d_q))
+}
+
+```
+
+```{r}
+#Run A2 algorithm
+learn_rate1 <- 0.001
+learn_rate2 <- 0.0001
+
+error <-  MSE(R,P,Q) + L2(sig,sig_p,P) + L2(sig,sig_q,Q)
+
+while(error >= 230){
+  if(error > 300){
+    lr <- learn_rate1
+  }
+  else{
+    lr <- learn_rate2
+  }
+  D <- d_pq(R,P,Q,sig,sig_p,sig_q)
+  d_p <- D[[1]]
+  d_q <- D[[2]]
+  P <- P - lr * d_p
+  Q <- Q - lr * d_q
+  error <- MSE(R,P,Q)
+}
+```
+
+```{r}
+#Save P Q matrices with different factors
+#write.csv(P,file="../output/A2_P_factor100.csv",row.names = F)
+#write.csv(Q,file="../output/A2_Q_factor100.csv",row.names = F)
+```
+
+```{r}
+#create R matrix prediction 
+R <- P %*% t(Q)
+```
+
+```{r}
+#MSE
+find_mse <- function(data,test){
+  movies<-data$movieId
+  users<-data$userId
+  pred<-as.numeric(t(test[match(c(as.character(users)),rownames(test)),
+                          match(c(as.character(movies)),colnames(test))]))
+  return(mean((data$rating-pred)^2))
+}
+```
+
+
+```{r}
+#Train RMSE 
+m1 <- find_mse(data_train[1:10000,],R)
+m2 <- find_mse(data_train[10001:20000,],R)
+m3 <- find_mse(data_train[20001:30000,],R)
+m4 <- find_mse(data_train[30001:40000,],R)
+m5 <- find_mse(data_train[40001:50000,],R)
+m6 <- find_mse(data_train[50001:60000,],R)
+m7 <- find_mse(data_train[60001:70000,],R)
+m8 <- find_mse(data_train[70001:80000,],R)
+m9 <- find_mse(data_train[80001:dim(data_train)[1],],R)
+train_rmse <- sqrt(((m1+m2+m3+m4+m5+m6+m7+m8)*10000+
+                      (dim(data_train)[1]-80000)*m9)/dim(data_train)[1])
+train_rmse
+```
+
+
+```{r}
+load("~/Desktop/data_test.csv")
+#Test RMSE
+mean11<-find_mse(data_test[1:10000,], R)
+mean21<-find_mse(data_test[10001:20000,],R)
+mean32<-find_mse(data_test[20001:dim(data_test)[1],],R)
+test_rmse<-sqrt(((mean11+mean21)*10000+
+                   (dim(data_test)[1]-20000)*mean32)/dim(data_test)[1])
+test_rmse
+```
+
+```{r}
+#save rmse 
+#first save factor rmse 
+# a2_rmse <- data.frame(factor=c(a2_factor,a2_factor),
+#                     Type=c("Train.RMSE","Test.RMSE"),
+#                     RMSE=c(train_rmse,test_rmse))
+
+#write.csv(a2_rmse,file="~/Desktop/a2_rmse.csv",row.names = F)
+#
+#a2_rmse <-read.csv("~/Desktop/a2_rmse.csv")
+#current <- data.frame(factor=c(a2_factor,a2_factor),
+#                    Type=c("Train.RMSE","Test.RMSE"),
+#                    RMSE=c(train_rmse,test_rmse))
+
+#a2_rmse <- rbind(a2_rmse,current)
+#write.csv(a2_rmse,file="~/Desktop/a2_rmse.csv",row.names = F)
+```
+
+```{r}
+#plot A2 rmse 
+library(ggplot2)
+
+a2_rmse <-read.csv("~/Desktop/a2_rmse.csv")
+
+p.A2P3 <-ggplot(a2_rmse, aes(x=factor, y=RMSE, col=Type))+
+  geom_line()+
+  labs(title = "Gradient Descent", x="Number of Factors", y="RMSE")+
+  theme_light()+
+  theme(plot.title = element_text(hjust = 0.5))
+p.A2P3
+```
+
+
+
+
+
+
+***Post-processing***-------------------------------------------------------------------------------- 
+
+
+
+
+```{r}
+library(krr)
+library(dplyr)
+library(caret)
+```
+
+
+```{r}
+load("~/Desktop/data_test.csv")
+load("~/Desktop/data_train.csv")
+r <- R
+q <- t(Q)
+movie <- unique(data_train$movieId)
+```
+
+```{r}
+start_time <-  Sys.time()
+
+sp_train <- split(data_train,data_train$userId)
+q_sp <- list()
+
+for (k in 1:length(sp_train)){
+  temp <- c()
+for (i in 1:dim(sp_train[[k]])[1]){
+ temp<-cbind(temp,q[,which(movie==sp_train[[k]]$movieId[i])])}
+ q_sp [[k]]<-temp
+}
+
+nor <- function(x){
+  return(x/sqrt(sum(x^2)))
+}
+
+q_trans <- t(apply(q,2,nor))
+val_sp <- list()
+for (k in 1:length(sp_train)){
+  val_sp[[k]]<-apply(q_sp [[k]],2,nor)}
+dat_sp <- list()
+for (k in 1:length(sp_train)){
+  dat_sp[[k]]<-cbind(sp_train[[k]]$rating,t(val_sp[[k]]))}
+
+```
+
+```{r}
+
+#Tune lambda with CV
+krr.cv <- function(data, kfold, p){
+  
+  set.seed(0)
+  data.x <- as.matrix(data[,-1])
+  data.y <- data[,1]
+  n <- nrow(data.x)
+  cv.id <- createFolds(1:n, k = kfold)
+  cv.tuning <- c()
+  for (j in cv.id){
+    train.x <- data.x[-j,]
+    train.y <- data.y[-j]
+    cv.x <- data.x[j,]
+    cv.y <- data.y[j]
+    
+    mod.cv <- krr(x = train.x,  train.y, lambda = p)
+
+    pred.cv <- predict(mod.cv, cv.x)
+
+    rmse.cv <- sqrt(mean((cv.y - pred.cv)^2))
+    cv.tuning <- cbind(cv.tuning, rmse.cv)
+    cv.mean <- mean(cv.tuning)
+    }
+  return(cv.mean)
+}
+```
+
+```{r}
+lambda <- c(0.45, 0.50, 0.55)
+
+rmse_tune <- data.frame(lambdas=lambda,rmse=rep(0,length(lambda)))
+
+for (i in 1:length(lambda)){
+  m <- lapply(dat_sp, krr.cv, 5, lambda[i])
+  rmse_tune[i,2] <-  sum(unlist(m))
+}
+best_lambda <- rmse_tune %>%
+  filter(rmse == min(rmse))
+best_lambda <- best_lambda$lambda
+
+
+train_model <- vector(mode="list",length=length(dat_sp))
+for(i in 1:length(dat_sp)){
+  train_model[[i]]<-krr(dat_sp[[i]][,-1],dat_sp[[i]][,1], best_lambda)}
+
+
+rating_preds <- matrix(NA,nrow=length(dat_sp),ncol=dim(q)[2])
+for (i in 1:length(dat_sp)){
+  rating_preds [i,]<-predict(train_model[[i]],q_trans)}
+
+
+rating <- r
+colnames(rating) <- c(as.character(movie))
+rownames(rating)<-c(1:610)
+colnames(rating_preds )<-c(as.character(movie))
+rownames(rating_preds )<-c(1:610)
+
+```
+
+```{r}
+#Find weight 
+weights <- seq(0,1,0.1)
+train_rmse <- data.frame(weights=weights,rmse=rep(0,length(weights)))
+wr <- list()
+for (i in 1:length(weights)){
+  wr[[i]]<- rating*(1-weights[i]) + rating_preds *weights[i]
+  wr[[i]]<-as.matrix(wr[[i]])
+  m1 <- find_mse(data_train[1:10000,],wr[[i]])
+  m2 <- find_mse(data_train[10001:20000,],wr[[i]])
+  m3 <- find_mse(data_train[20001:30000,],wr[[i]])
+  m4 <- find_mse(data_train[30001:40000,],wr[[i]])
+  m5 <- find_mse(data_train[40001:50000,],wr[[i]])
+  m6 <- find_mse(data_train[50001:60000,],wr[[i]])
+  m7 <- find_mse(data_train[60001:70000,],wr[[i]])
+  m8 <- find_mse(data_train[70001:80000,],wr[[i]])
+  m9 <- find_mse(data_train[80001:dim(data_train)[1],],wr[[i]])
+  train_rmse[i,2]<-sqrt(((m1+m2+m3+m4+m5+m6+m7+m8)*10000+
+                           (dim(data_train)[1]-80000)*m9)/dim(data_train)[1])
+}
+weight <- match(min(train_rmse$rmse), train_rmse$rmse)
+#Train RMSE
+train_rmse <- min(train_rmse$rmse)
+
+end_time <- Sys.time()
+cat("A2P3: ", end_time-start_time, " mins" )
+```
+
+
+```{r}
+#Test RMSE
+mean11<-find_mse(data_test[1:10000,], wr[[weight]])
+mean21<-find_mse(data_test[10001:20000,],wr[[weight]])
+mean32<-find_mse(data_test[20001:dim(data_test)[1],],wr[[weight]])
+test_rmse<-sqrt(((mean11+mean21)*10000+
+                   (dim(data_test)[1]-20000)*mean32)/dim(data_test)[1])
+test_rmse
+```
+
+```{r}
+#save rmse 
+#first save factor rmse 
+#a2_rmse <- data.frame(FACTOR=a2_factor,TRAIN=rmse_train,TEST=rmse_test)
+#save(a2_rmse,file=".~/Desktop/a2_rmse.RData")
+
+#load and save rmse
+#load("../output/a2p3_rmse.RData")
+#current <- data.frame(FACTOR=a2_factor,TRAIN=train_rmse,TEST=test_rmse)
+#a2_rmse <- rbind(current,a2_rmse)
+#save(a2_rmse,file="~/Desktop/a2p3_rmse.RData")
+```
+
+```{r}
+#plot A2P3 rmse 
+library(ggplot2)
+
+A2.P3 <-read.csv("~/Desktop/A2P3.csv")
+
+p.A2P3<-ggplot(A2.P3, aes(x=factor, y=RMSE, col=Type))+
+  geom_line()+
+  labs(title = "Gradient Descent with Post-processing", 
+       x="Number of Factors", y="RMSE")+
+  theme_light()+
+  theme(plot.title = element_text(hjust = 0.5))
+p.A2P3
+```
+
+```{r}
+#formatting for report
+temp <- A2.P3
+temp$RMSE <- c(a2_rmse[1,2],a2_rmse[1,3],
+               a2_rmse[2,2],a2_rmse[2,3],
+               a2_rmse[3,2],a2_rmse[3,3])
+A2.P3 <- temp
+write.csv(A2.P3,file="~/Desktop/A2P3.csv")
+
+```
+
