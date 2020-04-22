@@ -17,8 +17,8 @@ Term: Spring 2020
 **Contribution statement**:  
 + Shuxin Chen: Write the A3 post-processing part, helped Yuyao Wang completed the A3 (Alternating Least Squares) code, and contributed to complete the final report.
 + Jia Li:
-+ Wenfeng Lyu: write the main.rmd and final report, summarise and organise other's work, prepare the presentation slides and record, organise the github
-+ Daniel Schmidle:
++ Wenfeng Lyu: write the main.rmd and final report, summarise and organise other's work, prepare the presentation slides and record, organise the github.
++ Daniel Schmidle: write the entire A2 (Gradient Descent with Probabilistic Assumptions) and A2 post-processing parts, and contributed to complete the final report.
 + Yuyao Wang: Write the A3 (Alternating Least Squares) part, helped Shuxin Chen completed the A3 post-processing code, and contributed to complete the final report.
 
 All team members approve our work presented in this GitHub repository including this contributions statement.
