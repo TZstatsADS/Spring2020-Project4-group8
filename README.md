@@ -15,11 +15,11 @@ Term: Spring 2020
 + Project summary: In this project, the datasets that we are going to use describe 5-star ratings from a movie recommendation service. We implemented two methods for collaborative filtering from scratch, namely Gradient Descent with Probabilistic Assumptions (A2) and Alternating Least Squares (A3). Then we have used SVD with Kernel Ridge Regression (P3) for post-processing to improve prediction accuracy. In the end, we compared and summarized the performance of these two methods given the same post-processing method (SVD with KRR).
 	
 **Contribution statement**:  
-+ Shuxin Chen: Write the A3 post-processing part, helped Yuyao Wang completed the A3 (Alternating Least Squares) codeand contributed to complete the final report.
++ Shuxin Chen: Contributed to the A3/P3 with Yuyao: Write the A3 post-processing part, helped Yuyao Wang completed the A3 (Alternating Least Squares) code and contributed to complete the final report.
 + Jia Li: Brain storm. Help with A2 (Gradient Descent with Probabilistic Assumptions) and A2 post-processing parts,and contributed to complete the final report.
-+ Wenfeng Lyu: write the main.rmd and final report, summarise and organise other's work, prepare the presentation slides and record, organise the github.
-+ Daniel Schmidle: write the entire A2 (Gradient Descent with Probabilistic Assumptions) and A2 post-processing parts, and contributed to complete the final report.
-+ Yuyao Wang: Write the A3 (Alternating Least Squares) part, helped Shuxin Chen completed the A3 post-processing code, and contributed to complete the final report.
++ Wenfeng Lyu: Write the main.rmd and final report, summarise and organise other's work, prepare the presentation slides and record, organise the github.
++ Daniel Schmidle:  Write the entire A2 and A2 post-processing parts by myself without help of other team member, and contributed to complete the final report. 
++ Yuyao Wang: Contributed to the A3/P3 with Shuxin: Write the A3 (Alternating Least Squares) part, and helped Shuxin Chen completed the A3 post-processing code, and contributed to complete the final report.
 
 All team members approve our work presented in this GitHub repository including this contributions statement.
 
